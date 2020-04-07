@@ -1,0 +1,12 @@
+version: '2.1'
+
+services:
+    sim-server:
+        build: ./sim-server
+        environment:
+            - VIDEO_URL=rtsp://sim-video:8554/live.sdp
+        ports:
+            - 5000:5000
+
+    sim-video:
+        image: ullaakut/rtspatt

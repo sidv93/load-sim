@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+{% block title %}Genesis App{% endblock %}
+
+{% block body %}
+<div class="jumbotron jumbotron-fluid">
+    <div class="container">
+        <div class="float-right" id="cpu">CPU</div><br>
+        <div class="float-right" id="ram">RAM</div><br>
+        <h1 class="text-center">The Genesis Load Simulator</h1>
+        
+
+        <form class="collapse" id="configure">
+            <div class="form-group">
+                <label for="server">Server</label>
+                <input type="text" class="form-control" id="server" name="server" aria-describedby="serverHelp"
+                    placeholder="eg: qabox.asteria.co.in">
+                <small id="serverHelp" class="form-text text-muted">The server that you want to put the load on</small>
+            </div>
+            <div class="form-group">
+                <label for="username">Username</label>
+                <input type="text" class="form-control" id="username" name="username" aria-describedby="usernameHelp"
+                    placeholder="username">
+                <small id="usernameHelp" class="form-text text-muted">Username with pilot access at chosen server</small>
+            </div>
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" class="form-control" id="password" name="password" placeholder="password">
+            </div>
+            <button id="submit" data-toggle="popover" data-trigger="focus" data-content="Check credentials?" type="submit" class="btn btn-primary">Configure</button>
+        </form>
+    </div>
+</div>
+
+<div class="card collapse" id="loadControls">
+    <div class="card-header">
+        <h5>Configured to run simulations</h5>
+        <footer class="blockquote-footer" id="pilot"></footer>
+    </div>
+    <div class="card-body">
+        <h6 class="card-subtitle text-muted" id="serverName"></h6>
+        <br/>
+        <div class="input-group mb-3">
+            <div class="input-group-prepend">
+                <label class="input-group-text" for="inputGroupSelect01">
+                    Number of simulations to be applied to server
+                </label>
+            </div>
+            <input type="text" id="inputGroupSelect01" class="form-control" placeholder="" aria-label="Recipient's username" value='0'>
+            <div class="input-group-append">
+              <button id="setFlightCount" class="btn btn-outline-secondary" type="button">Set</button>
+            </div>
+        </div>
+        <button id="unconfigure" class="btn btn-danger" type="button">Unconfigure</button>
+    </div>
+</div>
+{% endblock %}
+
+{% block script %}
+<script>
+    setInterval(getSystemStats, 10000);
+
+    function getSystemStats() {
+        $.ajax({
+            type: 'GET',
+            url: '/system/stats',
+            success: res => {
+                $('#cpu').text(`${res.cpu}% CPU`)
+                $('#ram').text(`${res.memory}% RAM`)
+            },
+            error: console.log
+        });
+    }
+
+    function boot() {
+        getSystemStats();
+
+        $('#configure').collapse('hide')
+        $('#loadControls').collapse('hide');
+        $.ajax({
+            type: 'GET',
+            url: '/genesis/api/auth',
+            success: res => {
+                if(!res.server || res.server === "") {
+                    $('#configure').collapse('show')
+                } else {
+                    $('#serverName').text(res.server);
+                    $('#pilot').text(`  by the pilot '${res.username}'`);
+                    $('#inputGroupSelect01').val(res.flights.length);
+                    $('#loadControls').collapse('show');
+                    $('#inputGroupSelect01').focus();
+                }
+            },
+            error: console.log
+        });
+    }
+
+    $('#configure').submit(event => {
+        event.preventDefault();
+        $('#submit').popover('hide');
+        let form = $('#configure');
+        $.ajax({
+            type: 'POST',
+            url: '/genesis/api/auth',
+            data: form.serialize(),
+            success: serverConfigured,
+            error: err => $('#submit').popover('show')
+        });
+    });
+
+    $('#setFlightCount').click(setFlightCount);
+    $('#inputGroupSelect01').keydown(e => {
+        if(e.keyCode !== 13)
+            return true;
+        
+        setFlightCount();
+        return false;
+    });
+    $('#unconfigure').click(unconfigure);
+
+    function unconfigure() {
+        $('#serverName').text('');
+        $('#inputGroupSelect01').val(0);
+        $.ajax({
+            type: 'DELETE',
+            url: `/genesis/api/auth`,
+            success: res => {
+                $('#configure').collapse('show')
+                $('#loadControls').collapse('hide')
+            },
+            error: console.log
+        })
+    }
+
+    function setFlightCount() {
+        let count = $('#inputGroupSelect01').val();
+        $.ajax({
+            type: 'POST',
+            url: `/genesis/api/flights/scale/${count}`,
+            success: console.log,
+            error: res => boot()
+        })
+    }
+
+    function serverConfigured(data) {
+        if(!data.server || (data.server === '')) {
+            $('#submit').popover('show');
+            return;
+        }
+
+        $('#serverName').text(data.server);
+        $('#inputGroupSelect01').val(data.flights.length);
+        
+        $('#configure').collapse('hide')
+        $('#loadControls').collapse('show');
+        $('#inputGroupSelect01').focus();
+    }
+
+    boot();
+</script>
+{% endblock %}
